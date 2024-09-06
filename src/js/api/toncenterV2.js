@@ -24,12 +24,12 @@ const http = axios.create({
  * @param  {Number} options.endUtime
  * @return {Promise<Array>}
  */
-export const getPreviousBlocks = async function ({ wc, limit, offset, startUtime, endUtime }) {
-    const { data: result } = await http.get('v1/blocks', {
+export const getPreviousBlocks = async function ({ wc, limit, offset, startUtime, endUtime, afterLt } = {}) {
+    const { data: { blocks: result } } = await http.get('/blocks', {
         params: {
+            offset, limit,
+            after_lt: afterLt,
             workchain: wc,
-            limit: limit || 1,
-            offset: offset,
             start_utime: startUtime,
             end_utime: endUtime,
             sort: 'desc',
@@ -37,26 +37,13 @@ export const getPreviousBlocks = async function ({ wc, limit, offset, startUtime
     });
 
     result.forEach((block) => {
+        /* eslint no-param-reassign: "off" */
         block.root_hash_hex = block.root_hash;
         block.root_hash = hexToBase64(block.root_hash);
     });
 
     return result.map(Object.freeze);
 };
-
-const getSourceAndDestination = function (msg, address, hash) {
-    const from = msg.source ? canonizeAddress(msg.source) : null;
-    const to = msg.destination ? canonizeAddress(msg.destination) : null;
-
-    return {
-        from, to,
-        is_out: address === from,
-        amount: msg.value || null,
-        created_at: msg.created_at,
-        hash: hexToBase64(hash),
-    };
-};
-
 /**
  * @param  {Number} options.wc
  * @param  {Number} options.startUtime
@@ -64,7 +51,7 @@ const getSourceAndDestination = function (msg, address, hash) {
  * @return {Promise<Array>}
  */
 export const getAllTransactions = async function ({ wc, limit, startUtime, endUtime } = {}) {
-    const { data: result } = await http.get('v1/transactions', {
+    const { data: result } = await http.get('transactions', {
         params: {
             workchain: wc,
             limit: limit,

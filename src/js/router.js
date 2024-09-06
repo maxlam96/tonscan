@@ -16,23 +16,29 @@ import PageSingleNominator from '~/components/pool/PageSingleNominator.vue';
 import PageLocker from '~/components/address/PageLocker.vue';
 import PageValidators from '~/components/validators/PageValidators.vue';
 import PageSuspended from '~/components/address/PageSuspended.vue';
+import PageWhales from '~/components/PageWhales.vue';
+import PageError from '~/components/PageError.vue';
 import PageConfig from '~/components/config/PageConfig.vue';
+import { ADDRESS_REGEX, APP_MAIN_LOCALE } from '~/config.js';
 import PageApps from '~/components/apps/PageApps.vue';
 import AppWrapper from '~/components/apps/App/AppWrapper.vue';
-import { ADDRESS_REGEX, APP_MAIN_LOCALE } from '~/config.js';
 
 Vue.use(VueRouter);
 
 const router = new VueRouter({
     hashbang: false,
     mode: 'history',
-    scrollBehavior() {
+    scrollBehavior(to, from, savedPosition) {
+        if (to.name === 'apps' && from.name === 'apps') {
+            return savedPosition;
+        }
         return { x: 0, y: 0 };
     },
+    /* eslint no-useless-escape: "off" */
     routes: [{
         path: '/:lang(ru|en)?',
         component: {
-            render: (h) => h('router-view'),
+            render: h => h('router-view'),
         },
         children: [{
             name: 'index',
@@ -59,7 +65,7 @@ const router = new VueRouter({
             props: true,
         }, {
             // redirect from OKX vsraty format:
-            path: 'tx/&lt=:lt([\\d]+)&hash=:hash([^:\$]+)',
+            path: 'tx/&lt=:lt([\\d]+)&hash=:hash([^:$]+)',
             redirect: { name: 'tx' },
         }, {
             // redirect from old transaction format (lt:hash:address):
@@ -67,16 +73,16 @@ const router = new VueRouter({
             redirect: { name: 'tx' },
         }, {
             // redirect from ancient transaction format (lt$hash$address):
-            path: 'tx/:lt([\\d]+)\$:hash([^:\$]+)\$:address(.{48})',
+            path: 'tx/:lt([\\d]+)$:hash([^:$]+)$:address(.{48})',
             redirect: { name: 'tx' },
         }, {
             name: 'tx',
-            path: 'tx/:hash([^:\$]{44,})',
+            path: 'tx/:hash([^:$]{44,})',
             component: PageTx,
             props: true,
         }, {
             name: 'block',
-            path: 'block/:workchain([\\-\\d]+)\::shard([\\-\\d]+)\::seqno([\\d]+)',
+            path: 'block/:workchain([\\-\\d]+)\::shard([a-fA-F\\d]+)\::seqno([\\d]+)',
             component: PageBlock,
             meta: { title: 'TON Explorer :: Block' },
             props: true,
@@ -142,10 +148,6 @@ const router = new VueRouter({
             component: PageValidators,
             meta: { title: 'TON Explorer :: Validators list' },
         }, {
-            name: 'config',
-            path: '/config',
-            component: PageConfig,
-        }, {
             name: 'apps',
             path: 'apps',
             component: PageApps,
@@ -162,10 +164,35 @@ const router = new VueRouter({
                 component: AppWrapper,
                 props: true,
             }],
-        }],
+        }, {
+            name: 'whales',
+            path: 'whales',
+            component: PageWhales,
+        },
+        {
+            path: 'top',
+            redirect: { name: 'whales' },
+        },
+        {
+            path: 'richlist',
+            redirect: { name: 'whales' },
+        },
+        {
+            name: 'config',
+            path: '/config',
+            component: PageConfig,
+        },
+        {
+            name: '404',
+            path: '*',
+            component: PageError,
+            meta: { title: 'TON Explorer :: Page not found' },
+        },
+        ],
     }],
 });
 
+/* eslint no-unused-vars: "off" */
 router.beforeEach((to, from, next) => {
     // replace main locale prefix with domain root:
     if (to.params.lang === APP_MAIN_LOCALE) {
@@ -176,7 +203,6 @@ router.beforeEach((to, from, next) => {
                 lang: undefined,
             },
         });
-
     } else {
         next();
     }

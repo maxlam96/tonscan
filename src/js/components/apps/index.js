@@ -3,10 +3,11 @@ import { searchApps as searchAppsRaw } from '~/api/typesense.js';
 
 /**
  * @see https://docs.imgproxy.net/usage/processing
- * @param  {String} uri
- * @param  {Number} options.width
- * @param  {Number} options.height
- * @param  {String} options.resizingType
+ * @param {String} uri
+ * @param {Object} options
+ * @param {Number} options.width
+ * @param {Number} options.height
+ * @param {String} options.resizingType
  * @return {String}
  */
 export const makeImageUrl = (uri, { width, height, resizingType } = {}) => {
@@ -40,16 +41,16 @@ const appCache = new Map();
 
 /**
  * Clears local cache variable, should call this function in beforeDestroy hook.
- * @return {undefined}
+ * @return {void}
  */
 export const clearSearchCache = () => appCache.clear();
 
 /**
  * Maps typesense result to object.
- * @param  {Object} document
+ * @param {Object} document
  * @return {Object}
  */
-const mapData = (document) => Object.freeze({ // eslint-disable-line arrow-parens
+const mapData = document => Object.freeze({
     id: document.id,
     title: document.name,
     slug: document.slug,
@@ -62,12 +63,10 @@ const mapData = (document) => Object.freeze({ // eslint-disable-line arrow-paren
     categorySlug: document.category_slug,
     linkFull: document.link,
     tonAddress: document.address,
-
     descriptions: new LocaleBucket([
         ['ru', document.short_description_ru],
         ['en', document.short_description],
     ]),
-
     fullDescriptions: new LocaleBucket([
         ['ru', document.full_description_ru],
         ['en', document.full_description],
@@ -75,13 +74,12 @@ const mapData = (document) => Object.freeze({ // eslint-disable-line arrow-paren
 });
 
 /**
- * @param {String} query
+ * Searches for apps and maps results to app objects.
  * @param {Object} params
  * @returns {Promise<Object>}
  */
-export const searchApps = async function searchAppsAndMapResultsToAppObject(params = {}) {
+export const searchApps = async (params = {}) => {
     const results = await searchAppsRaw(params);
-
     const apps = results.hits.map(({ document }) => mapData(document));
 
     // Save all received apps to cache:
@@ -94,11 +92,11 @@ export const searchApps = async function searchAppsAndMapResultsToAppObject(para
 };
 
 /**
- *
+ * Finds app by slug or returns cached app.
  * @param {String} name
  * @returns {Promise<Object>}
  */
-export const findApp = async function searchAppBySlugOrReturnCached(name) {
+export const findApp = async (name) => {
     if (appCache.has(name)) {
         return appCache.get(name);
     }

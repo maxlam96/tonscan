@@ -1,30 +1,28 @@
 <template>
     <section>
-        <div v-if="emptyHistory"
-            class="tx-history-empty-panel"
-            v-text="$t('address.tx_table.empty')"/>
+        <div v-if="emptyHistory" class="tx-history-empty-panel" v-text="$t('address.tx_table.empty')" />
 
         <div v-show="!emptyHistory" class="tx-history-wrap desktop-table">
-            <table class="tx-table tx-history-table">
+            <table class="tx-table">
                 <thead v-if="!isMobile">
                     <tr>
                         <th v-pre width="40"></th>
                         <th width="100">
-                            <div class="tx-table__cell"
-                                v-text="$t('address.tx_table.age')"/>
+                            <div class="tx-table__cell" v-text="$t('address.tx_table.age')" />
                         </th>
                         <th>
-                            <div class="tx-table__cell tx-table__cell--align-right"
-                                v-text="$t('address.tx_table.from')"/>
+                            <div class="tx-table__cell tx-table__cell--align-right" v-text="$t('address.tx_table.from')" />
                         </th>
                         <th v-pre width="50"></th>
                         <th>
-                            <div class="tx-table__cell"
-                                v-text="$t('address.tx_table.to')"/>
+                            <div class="tx-table__cell" v-text="$t('address.tx_table.to')" />
                         </th>
+                        <!-- <th v-if="dataSource === 'tonapi'">
+                            <div class="tx-table__cell tx-table__cell--align-center" v-text="$t('events.title')"/>
+                        </th> -->
                         <th>
                             <div class="tx-table__cell tx-table__cell--align-right" style="padding-right: 26px;"
-                                v-text="$t('address.tx_table.value')"/>
+                                v-text="$t('address.tx_table.value')" />
                         </th>
                         <th v-pre width="40">
                             <div class="tx-table__cell"></div>
@@ -32,65 +30,56 @@
                     </tr>
                 </thead>
 
-                <tbody v-show="!address || transactions.length == 0">
-                    <component v-for="i in 8" 
-                        v-bind:is="isMobile ? 'tx-row-skeleton-mobile' : 'tx-row-skeleton'" v-bind:key="`tx_skeleton_${i}`">
-                    </component>
-                </tbody>
-                
                 <template v-if="address">
                     <template v-for="tx in transactions">
-                        <template v-for="(msg, idx) in tx.messages">
-                            <keep-alive>
-                                <tx-row v-if="displayMsg(msg) && !isMobile"
-                                    v-bind:class="{ 'sub-list': idx > 0 }"
-                                    v-bind:address="address"
-                                    v-bind:key="`${tx.hash}_${idx}`"
-                                    v-bind:txHash="tx.hash"
-                                    v-bind:txLt="tx.lt"
-                                    v-bind:timestamp="tx.timestamp"
-                                    v-bind:fee="tx.fee"
-                                    v-bind:exitCode="tx.exit_code"
-                                    v-bind:outputCount="tx.output_count"
-                                    v-bind:action="msg.action"
-                                    v-bind:meta="msg.meta"
-                                    v-bind="msg" />
-                                <tx-row-mobile v-else-if="displayMsg(msg) && isMobile"
-                                    v-bind:class="{ 'sub-list': idx > 0 }"
-                                    v-bind:address="address"
-                                    v-bind:key="`mobile_${tx.hash}_${idx}`"
-                                    v-bind:txHash="tx.hash"
-                                    v-bind:txLt="tx.lt"
-                                    v-bind:timestamp="tx.timestamp"
-                                    v-bind:fee="tx.fee"
-                                    v-bind:exitCode="tx.exit_code"
-                                    v-bind:outputCount="tx.output_count"
-                                    v-bind:action="msg.action"
-                                    v-bind:meta="msg.meta"
-                                    v-bind="msg" />
-                            </keep-alive>
-                        </template>
+                        <keep-alive
+                            v-for="(msg, idx) in tx.messages"
+                            v-bind:key="`tx_${tx.hash}_msg_${idx}`">
+                            <component
+                                v-if="displayMsg(msg)"
+                                v-bind:is="isMobile ? 'tx-row-mobile' : 'tx-row'"
+                                v-bind:class="{ 'sub-list': idx > 0 }"
+                                v-bind:address="address"
+                                v-bind:txHash="tx.hash"
+                                v-bind:txLt="tx.lt"
+                                v-bind:timestamp="tx.timestamp"
+                                v-bind:fee="tx.fee"
+                                v-bind:exitCode="tx.exit_code"
+                                v-bind:outputCount="tx.output_count"
+                                v-bind:action="msg.action"
+                                v-bind:event="msg.event"
+                                v-bind:meta="msg.meta"
+                                v-bind="msg"/>
+                        </keep-alive>
                     </template>
+                </template>
+
+                <template v-if="!address || transactions.length == 0">
+                    <component
+                        v-bind:is="isMobile
+                            ? 'tx-row-skeleton-mobile'
+                            : 'tx-row-skeleton'"
+                        v-for="i in 8"
+                        v-bind:key="`tx_skeleton_${i}`"/>
                 </template>
             </table>
         </div>
 
-        <mugen-scroll class="mugen-scroll" v-bind:handler="loadMore" v-bind:should-handle="shouldHandleScroll">
-            <div ref="infiniteLoader" class="mugen-scroll__button" v-show="showPreloader" v-on:click="loadMore">
-                <template v-if="isLoading">{{$t('common.loading')}}</template>
-                <template v-else>{{$t('common.load_more')}}</template>
-            </div>
-        </mugen-scroll>
+        <ui-mugen-scroll
+            v-bind:handler="loadMore"
+            v-bind:shouldHandle="shouldHandleScroll"
+            v-bind:showButton="showPreloader"
+            v-bind:isLoading="isLoading"/>
     </section>
 </template>
 
 <script>
-import { getTransactionsByAddress } from '~/api/indexator.js';
+import { mapState } from 'vuex';
+import { getTransactionsV3 } from '~/api/toncenterV2.js';
 import TxRowSkeleton from './TxRowSkeleton.vue';
 import TxRowSkeletonMobile from './TxRowSkeletonMobile.vue';
 import TxRow from './TxRow.vue';
 import TxRowMobile from './TxRowMobile.vue';
-import MugenScroll from 'vue-mugen-scroll';
 
 export default {
     props: {
@@ -112,31 +101,31 @@ export default {
 
     computed: {
         shouldHandleScroll() {
-            return !this.isLoading
-                && this.address
-                && this.hasMore
-                && this.transactions.length > 0;
+            return !this.isLoading && this.address && this.hasMore && this.transactions.length > 0;
         },
 
         showPreloader() {
-            return this.address
-                && this.transactions.length > 0
-                && this.hasMore;
+            return this.address && this.transactions.length > 0 && this.hasMore;
         },
+
+        ...mapState({ dataSource: 'txTableSource' }),
     },
 
     watch: {
         address: {
             immediate: true,
-            handler(address) {
-                if (!address) return;
+            handler(newAddress) {
+                if (!newAddress) return;
+                this.resetState();
+                this.loadData();
+            },
+        },
 
+        dataSource: {
+            immediate: false,
+            handler() {
                 this.transactions = [];
-                this.isLoading = true;
-                this.hasMore = true;
-                this.emptyHistory = false;
-
-                this.$nextTick(() => this.loadData());
+                this.loadData();
             },
         },
     },
@@ -155,44 +144,58 @@ export default {
         },
 
         async loadData() {
-            const transactions = await getTransactionsByAddress(this.address, { limit: 20 });
+            this.isLoading = true;
+            this.transactions = [];
+            const limit = 20;
 
-            this.transactions = transactions;
-            this.emptyHistory = transactions.length === 0;
-            this.hasMore = transactions.length >= 20;
-            this.isLoading = false;
+            try {
+                const transactions = await getTransactionsV3(this.address, { limit });
+                this.transactions = transactions;
+                this.emptyHistory = transactions.length === 0;
+                this.hasMore = transactions.length >= limit;
 
-            // fix the latest timestamp so that the new transactions don't break offset+limit:
-            this.lastActivity = transactions.length > 0
-                ? this.transactions[0]?.timestamp
-                : null;
-
-            this.emitLastActivity();
+                // Fix the latest timestamp
+                this.lastActivity = transactions.length > 0 ? this.transactions[0]?.timestamp : null;
+            } catch (error) {
+                console.log('Error loading transactions:', error);
+            } finally {
+                this.isLoading = false;
+                this.emitLastActivity();
+            }
         },
 
         async loadMore() {
-            // Since the address prop can be undefined, the should-handle
-            // prop may not be updated in time (delayed tick):
-            if (!this.shouldHandleScroll || !this.$refs.infiniteLoader.offsetParent) { return; }
-
             this.isLoading = true;
-
             const limit = 50;
-            const newTx = await getTransactionsByAddress(this.address, {
-                limit: limit,
-                offset: this.transactions.length,
-                end_utime: this.lastActivity,
-            });
 
-            this.hasMore = newTx.length >= limit;
-            this.isLoading = false;
+            try {
+                const newTx = await getTransactionsV3(this.address, {
+                    limit,
+                    offset: this.transactions.length,
+                    before_lt: this.transactions[this.transactions.length - 1].lt,
+                });
+                this.transactions.push(...newTx);
+                this.hasMore = newTx.length >= limit;
+            } catch (error) {
+                console.log('Error loading more transactions:', error);
+            } finally {
+                this.isLoading = false;
+            }
+        },
 
-            this.transactions = this.transactions.concat(newTx);
+        resetState() {
+            this.transactions = [];
+            this.isLoading = true;
+            this.hasMore = true;
+            this.emptyHistory = false;
         },
     },
 
     components: {
-        TxRow, TxRowMobile, TxRowSkeleton, TxRowSkeletonMobile, MugenScroll,
+        TxRow,
+        TxRowMobile,
+        TxRowSkeleton,
+        TxRowSkeletonMobile,
     },
 };
 </script>

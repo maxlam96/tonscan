@@ -41,6 +41,7 @@ Encore.enableSassLoader()
     .splitEntryChunks()
     .addAliases({
         '~': path.resolve(__dirname + '/src/js'),
+        '@': path.resolve(__dirname + '/src/js'),
         '@img': path.resolve(__dirname + '/src/img'),
         '@fonts': path.resolve(__dirname + '/src/fonts'),
     });

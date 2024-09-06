@@ -1,169 +1,227 @@
 // https://github.com/toncenter/tonweb/blob/f3304156fb3000e96a7ed10123ae31185792d05a/src/utils/Address.js
-import { crc16, hexToBytes, bytesToHex, stringToBytes } from '~/utils.js';
+import { crc16, hexToBytes, bytesToHex, stringToBytes, base64encode, base64decode } from '~/utils.js';
+import { IS_TESTNET } from '~/config.js';
 
-const bounceable_tag = 0x11;
-const non_bounceable_tag = 0x51;
-const test_flag = 0x80;
+/* eslint no-bitwise: "off" */
+
+const ADDRESS_TAG_NON_BOUNCEABLE = 0x51;
+const ADDRESS_TAG_BOUNCEABLE = 0x11;
+const ADDRESS_FLAG_TEST_ONLY = 0x80;
 
 /**
- * @private
- * @param addressString {string}
- * @return {{isTestOnly: boolean, workchain: number, hashPart: Uint8Array, isBounceable: boolean}}
+ * @param  {String} addressString
+ * @return {Object}
  */
-function parseFriendlyAddress(addressString, validateHash = false) {
+const parseUnfriendlyAddress = function getRawAddressInfo(addressString) {
+    const arr = addressString.split(':');
+
+    if (arr.length !== 2) {
+        throw new Error(`Invalid address: ${addressString}`);
+    }
+
+    const wc = parseInt(arr[0], 10);
+
+    if (wc !== 0 && wc !== -1) {
+        throw new Error(`Invalid address wc: ${addressString}`);
+    }
+
+    const hex = arr[1];
+
+    if (hex.length !== 64) {
+        throw new Error(`Invalid address hex: ${addressString}`);
+    }
+
+    return {
+        workchain: wc,
+        hashPart: hexToBytes(hex),
+    };
+};
+
+/**
+ * @param  {String} addressString
+ * @return {Object}
+ */
+const parseFriendlyAddress = function getBase64AddressInfo(addressString, validateHash = false) {
     if (addressString.length !== 48) {
-        throw new Error(`User-friendly address should contain strictly 48 characters`);
+        throw new Error('User-friendly address should contain strictly 48 characters');
     }
-    const data = stringToBytes(atob(addressString));
-    if (data.length !== 36) { // 1byte tag + 1byte workchain + 32 bytes hash + 2 byte crc
-        throw "Unknown address type: byte length is not equal to 36";
+
+    const data = stringToBytes(base64decode(addressString));
+
+    if (data.length !== 36) {
+        throw new Error('Unknown address type: byte length is not equal to 36');
     }
+
     const addr = data.slice(0, 34);
+    const dataView = new DataView(addr.buffer);
 
     if (validateHash) {
-        const crc = data.slice(34, 36);
-        const calcedCrc = crc16(addr);
-        if (!(calcedCrc[0] === crc[0] && calcedCrc[1] === crc[1])) {
-            throw "Wrong crc16 hashsum";
+        const calculatedHash = crc16(addr);
+        const currentHash = data.slice(34, 36);
+
+        if (calculatedHash.some((value, position) => value !== currentHash[position])) {
+            throw new Error('Wrong crc16 hashsum');
         }
     }
 
-    let tag = addr[0];
     let isTestOnly = false;
-    let isBounceable = false;
-    if (tag & test_flag) {
+    let tag = dataView.getInt8(0);
+
+    if (tag & ADDRESS_FLAG_TEST_ONLY) {
         isTestOnly = true;
-        tag = tag ^ test_flag;
+        tag ^= ADDRESS_FLAG_TEST_ONLY;
     }
 
-    if ((tag !== bounceable_tag) && (tag !== non_bounceable_tag)) {
-        throw "Unknown address tag";
+    if ((tag !== ADDRESS_TAG_BOUNCEABLE) && (tag !== ADDRESS_TAG_NON_BOUNCEABLE)) {
+        throw new Error(`Unknown address tag: ${tag}`);
     }
 
-    isBounceable = tag === bounceable_tag;
-
-    let workchain = null;
-    if (addr[1] === 0xff) { // TODO we should read signed integer here
-        workchain = -1;
-    } else {
-        workchain = addr[1];
-    }
-    if (workchain !== 0 && workchain !== -1) throw new Error('Invalid address wc ' + workchain);
-
-    const hashPart = addr.slice(2, 34);
-    return { isTestOnly, isBounceable, workchain, hashPart };
-}
+    return {
+        workchain: dataView.getInt8(1),
+        hashPart: addr.slice(2, 34),
+        isBounceable: tag === ADDRESS_TAG_BOUNCEABLE,
+        isUrlSafe: !addressString.includes('-') && !addressString.includes('/'),
+        isTestOnly,
+    };
+};
 
 export class Address {
     /**
      * @param anyForm {string | Address}
+     * @return {undefined}
      */
     constructor(anyForm) {
-        if (anyForm == null) {
-            throw "Invalid address";
+        if (anyForm === null || anyForm === undefined) {
+            throw new Error('Invalid address');
         }
 
         if (anyForm instanceof Address) {
             this.wc = anyForm.wc;
             this.hashPart = anyForm.hashPart;
-            this.isTestOnly = anyForm.isTestOnly;
             this.isUserFriendly = anyForm.isUserFriendly;
             this.isBounceable = anyForm.isBounceable;
+            this.isTestOnly = anyForm.isTestOnly;
             this.isUrlSafe = anyForm.isUrlSafe;
             return;
         }
 
-        if (anyForm.search(/\-/) > 0 || anyForm.search(/_/) > 0) {
-            this.isUrlSafe = true;
-            anyForm = anyForm.replace(/\-/g, '+').replace(/_/g, '\/');
-        } else {
-            this.isUrlSafe = false;
-        }
-        if (anyForm.indexOf(':') > -1) {
-            const arr = anyForm.split(':');
-            if (arr.length !== 2) throw new Error('Invalid address ' + anyForm);
-            const wc = parseInt(arr[0]);
-            if (wc !== 0 && wc !== -1) throw new Error('Invalid address wc ' + anyForm);
-            const hex = arr[1];
-            if (hex.length !== 64) throw new Error('Invalid address hex ' + anyForm);
+        if (anyForm.includes(':')) {
+            const { workchain, hashPart } = parseUnfriendlyAddress(anyForm);
+
+            this.wc = workchain;
+            this.hashPart = hashPart;
             this.isUserFriendly = false;
-            this.wc = wc;
-            this.hashPart = hexToBytes(hex);
-            this.isTestOnly = false;
             this.isBounceable = false;
-        } else {
-            this.isUserFriendly = true;
-            const parseResult = parseFriendlyAddress(anyForm);
-            this.wc = parseResult.workchain;
-            this.hashPart = parseResult.hashPart;
-            this.isTestOnly = parseResult.isTestOnly;
-            this.isBounceable = parseResult.isBounceable;
+            this.isTestOnly = false;
+            this.isUrlSafe = true;
+            return;
         }
+
+        const { workchain, hashPart, isBounceable, isTestOnly, isUrlSafe } = parseFriendlyAddress(anyForm);
+
+        this.wc = workchain;
+        this.hashPart = hashPart;
+        this.isUserFriendly = true;
+        this.isBounceable = isBounceable;
+        this.isTestOnly = isTestOnly;
+        this.isUrlSafe = isUrlSafe;
     }
 
     /**
-     * @param isUserFriendly? {boolean}
-     * @param isUrlSafe? {boolean}
-     * @param isBounceable? {boolean}
-     * @param isTestOnly? {boolean}
-     * @return {string}
+     * Factory:
      */
-    toString(isUserFriendly, isUrlSafe, isBounceable, isTestOnly) {
-        if (isUserFriendly === undefined) isUserFriendly = this.isUserFriendly;
-        if (isUrlSafe === undefined) isUrlSafe = this.isUrlSafe;
-        if (isBounceable === undefined) isBounceable = this.isBounceable;
-        if (isTestOnly === undefined) isTestOnly = this.isTestOnly;
+    static parse(anyForm) {
+        return new Address(anyForm);
+    }
+
+    /**
+     * @param  {Boolean} options.userFriendly
+     * @param  {Boolean} options.bouncable
+     * @param  {Boolean} options.testOnly
+     * @return {String}
+     */
+    toString({ userFriendly, bouncable, testOnly }) {
+        const isUserFriendly = userFriendly ?? this.isUserFriendly;
+        const isBounceable = bouncable ?? this.isBounceable;
+        const isTestOnly = testOnly ?? this.isTestOnly;
 
         if (!isUserFriendly) {
-            return this.wc + ":" + bytesToHex(this.hashPart);
-        } else {
-            let tag = isBounceable ? bounceable_tag : non_bounceable_tag;
-            if (isTestOnly) {
-                tag |= test_flag;
-            }
-
-            const addr = new Int8Array(34);
-            addr[0] = tag;
-            addr[1] = this.wc;
-            addr.set(this.hashPart, 2);
-
-            const addressWithChecksum = new Uint8Array(36);
-            addressWithChecksum.set(addr);
-            addressWithChecksum.set(crc16(addr), 34);
-            let addressBase64 = btoa(String.fromCharCode.apply(null, new Uint8Array(addressWithChecksum)));
-
-            if (isUrlSafe) {
-                addressBase64 = addressBase64.replace(/\+/g, '-').replace(/\//g, '_');
-            }
-
-            return addressBase64;
+            return `${this.wc}:${bytesToHex(this.hashPart)}`;
         }
+
+        let tag = isBounceable
+            ? ADDRESS_TAG_BOUNCEABLE
+            : ADDRESS_TAG_NON_BOUNCEABLE;
+
+        if (isTestOnly) {
+            tag |= ADDRESS_FLAG_TEST_ONLY;
+        }
+
+        // 1 byte tag + 1 byte workchain + 32 bytes hash + 2 byte crc
+        const addr = Int8Array.of(tag, this.wc, ...this.hashPart, 0x0, 0x0);
+        const hash = crc16(addr.slice(0, 34));
+        addr.set(hash, 34);
+
+        return base64encode(String.fromCharCode.apply(null, new Uint8Array(addr)));
     }
 }
 
 /**
- * @param  {String} addressString
+ * @param  {String} address
  * @return {String}
  */
-export const canonizeAddress = function(addressString) {
-    const address = new Address(addressString);
+export const canonizeAddress = function convertAddressToAppropriateFormat(address, { type } = {}) {
+    const addressMustBeUnbounceable = ['wallet', 'uninit'].includes(type);
+    const givenAddressIsUserFriendly = address.length === 48;
+    const givenAddressIsUnbounceable = address.startsWith('U') || address.startsWith('0');
 
-    if (!address.isUserFriendly || !address.isUrlSafe || !address.isBounceable || address.isTestOnly) {
-        return address.toString(true, true, true, false);
+    if (givenAddressIsUserFriendly) {
+        // Skip serialization if address is already in correct format:
+        if (addressMustBeUnbounceable === givenAddressIsUnbounceable) {
+            return address;
+        }
     }
 
-    return addressString;
+    return Address.parse(address).toString({
+        bouncable: !addressMustBeUnbounceable,
+        testOnly: IS_TESTNET,
+        userFriendly: true,
+    });
 };
 
-export const isValidAddress = function(addressString) {
+/**
+ * @param  {String}  addressString
+ * @return {Boolean}
+ */
+export const isValidAddress = function checkWhetherTheStringIsValidTonAddress(addressString) {
     if (addressString.length !== 48 && addressString.length !== 66) {
         return false;
     }
 
     try {
-        const _ = new Address(addressString);
+        const _ = new Address(addressString); /* eslint no-unused-vars: "off" */
         return true;
-    } catch (e) {
+    } catch {
         return false;
     }
+};
+
+/**
+ * Checks addresses base64-encoded hash part (from second to 44-th symbol).
+ *
+ * @param  {String|null}  a
+ * @param  {String|null}  b
+ * @return {Boolean}
+ */
+export const isSameAddress = function fastCheckAddressesHashPartsAreSame(a, b) {
+    if (a === b) {
+        return true;
+    }
+
+    if (!a || !b) {
+        return false;
+    }
+
+    return a.length === b.length
+        && a.substring(1, 44) === b.substring(1, 44);
 };

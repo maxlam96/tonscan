@@ -3,50 +3,43 @@
         <div class="card-title" style="border: none;" v-text="$t('stats.staking')"/>
 
         <div class="data-container">
-            <side-ear v-if="!isDataLoading"
+            <side-ear v-if="!isDataLoading && validatorsAmount > 0 && validatorsAmount > 0"
                 v-bind:param-top="stakingData.apy"
                 v-bind:param-middle="stakingData.total"
                 v-bind:param-bottom="stakingData.validators"
                 v-bind:interval="interval"/>
 
-            <line-chart style="flex-grow: 1"
-                v-bind:labels="parsedChartLabels"
-                v-bind:datasets="parsedChartDatasets"/>
+            <div class="stats-chart">
+                <line-chart ref="chart" style="flex-grow: 1"
+                    v-bind:labels="parsedChartLabels"
+                    v-bind:datasets="datasets"
+                    v-bind:chartType="'Baseline'"
+                />
+            </div>
         </div>
     </div>
 </template>
 
 <script>
-import LineChart from '~/lib/Chart.js/UiChartLine.vue';
+import {
+    AMOUNT_OF_DATA_ON_MOBILE,
+    AMOUNT_OF_DATA_ON_TABLET,
+    MULTIPLIER,
+} from '~/helpers.js';
+import { decimateData } from '~/decimation.js';
+import LineChart from '~/lib/Lightchart/UiChartLine.vue';
 import { prefixNumber } from '~/lib/Chart.js/helpers.js';
 import { getStakingInformation } from '~/api/tontech.js';
 import { getAddressInfo } from '~/api/toncenter.js';
 import { getValidatorsStats } from '~/api/elections.js';
-import ChartColorSchemeMixin from '~/mixins/chartColorScheme.js';
-import { decimateData } from '~/decimation.js';
-import ChartChangeIndicator from './ChartChangeIndicator.vue';
 import SideEar from './ChartSideEar.vue';
-import {
-    AMOUNT_OF_DATA_ON_MOBILE,
-    AMOUNT_OF_DATA_ON_TABLET,
-    decimateDataset,
-    MULTIPLIER,
-} from '~/helpers.js';
-
-const decimateStaking = (dataset, offset) => {
-    const updatedDataset = decimateDataset(dataset, offset);
-
-    return {
-        ...updatedDataset,
-        data: updatedDataset.data.map((y, idx) => ({ x: idx, y })),
-    };
-};
 
 export default {
-    mixins: [ChartColorSchemeMixin],
-
     props: {
-        validatorsAmount: Number,
+        validatorsAmount: {
+            type: Number,
+            default: undefined,
+        },
     },
 
     data() {
@@ -54,15 +47,13 @@ export default {
             originalData: undefined,
             labels: undefined,
             datasets: undefined,
-            total_staked: undefined,
-            validators_month_ago: undefined,
             stakingData: {
                 apy: {},
                 total: {},
-                validators: {}
+                validators: {},
             },
             interval: 30,
-            isDataLoading: true
+            isDataLoading: true,
         };
     },
 
@@ -73,140 +64,95 @@ export default {
             }
 
             switch (true) {
-                case this.isMobile: {
-                    return decimateData(this.labels, AMOUNT_OF_DATA_ON_MOBILE);
-                }
-                case this.isTablet: {
-                    return decimateData(this.labels, AMOUNT_OF_DATA_ON_TABLET);
-                }
-                default: {
-                    return this.labels;
-                }
-            }
-        },
-
-        parsedChartDatasets() {
-            if (!this.datasets) {
-                return undefined;
-            }
-
-            const [_apyDatatset, _stakedDataset] = this.datasets;
-
-            const apyDatatset = {
-                ..._apyDatatset,
-                backgroundGradient: [
-                    `${this.chartLineColor}50`,
-                    `${this.chartLineColor}20`,
-                    `${this.chartLineColor}00`,
-                ],
-                borderColor: this.chartLineColor,
-            };
-
-            const stakedDataset = {
-                ..._stakedDataset,
-                backgroundColor: `${this.chartLineColor}70`,
-            };
-
-            switch (true) {
-                case this.isMobile: {
-                    return [
-                        decimateStaking(apyDatatset, AMOUNT_OF_DATA_ON_MOBILE),
-                        decimateStaking(stakedDataset, AMOUNT_OF_DATA_ON_MOBILE),
-                    ];
-                }
-
-                case this.isTablet: {
-                    return [
-                        decimateStaking(apyDatatset, AMOUNT_OF_DATA_ON_TABLET),
-                        decimateStaking(stakedDataset, AMOUNT_OF_DATA_ON_TABLET),
-                    ];
-                }
-
-                default: {
-                    return [
-                        decimateStaking(apyDatatset, 1),
-                        decimateStaking(stakedDataset, 1),
-                    ];
-                }
+                case this.isMobile: return decimateData(this.labels, AMOUNT_OF_DATA_ON_MOBILE);
+                case this.isTablet: return decimateData(this.labels, AMOUNT_OF_DATA_ON_TABLET);
+                default: return this.labels;
             }
         },
     },
 
-    mounted() {
-        this.getData();
+    watch: {
+        validatorsAmount() {
+            this.getData();
+        },
     },
 
     methods: {
         async getData() {
-            const data = await getStakingInformation();
+            try {
+                const [data, totalStakedTons, validatorCountMonthAgo] = await Promise.all([
+                    getStakingInformation(),
+                    getAddressInfo('Ef8zMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM0vF').then(info => info.balance),
+                    getValidatorsStats({ offset: 43 }).then(list => list.at(0).validator_count),
+                ]);
 
-            const { balance: total_staked_ton } = await getAddressInfo('Ef8zMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM0vF');
+                const calculate = (dataset, key, localization) => {
+                    const monthAgo = new Date();
+                    monthAgo.setDate(monthAgo.getDate() - this.interval);
 
-            const labels = data.map(({ date }) => new Date(date).valueOf());
+                    const monthAgoIndex = dataset.findIndex(item => Date.parse(item.date) > monthAgo);
 
-            const calculate = (dataset, key, localization) => {
-                const monthAgo = new Date();
-                monthAgo.setDate(monthAgo.getDate() - this.interval);
+                    let latestValue = dataset.at(-1)[key];
+                    const earliestValue = dataset.at(monthAgoIndex)[key];
+                    const valueDiff = (latestValue - earliestValue) / latestValue;
 
-                const monthAgoIndex = dataset.findIndex((item) => Date.parse(item.date) > monthAgo);
+                    if (localization === 'stats.staking_apy') {
+                        latestValue = (latestValue * 100).toFixed(1) + '%';
+                    }
 
-                let latestValue = dataset.at(-1)[key];
-                const earliestValue = dataset.at(monthAgoIndex)[key];
-                const valueDiff = (latestValue - earliestValue) / latestValue;
+                    if (localization === 'stats.total_staked') {
+                        latestValue = prefixNumber(totalStakedTons / MULTIPLIER);
+                    }
 
-                if (localization == 'stats.staking_apy') latestValue = (latestValue * 100).toFixed(1) + '%';
-                if (localization == 'stats.total_staked') latestValue = prefixNumber(total_staked_ton / MULTIPLIER);
+                    return Object.freeze({
+                        localization,
+                        value: latestValue,
+                        change: valueDiff,
+                    });
+                };
 
-                return Object.freeze({
-                    localization: localization,
-                    value: latestValue,
-                    change: valueDiff,
+                this.stakingData.apy = calculate(data, 'annual_percent_yld', 'stats.staking_apy');
+                this.stakingData.total = calculate(data, 'staked', 'stats.total_staked');
+
+                const apyDatatset = Object.freeze({
+                    data: data.map(({ annual_percent_yld: apy }) => +(apy * 100).toFixed(1)),
+                    borderWidth: 1.5,
+                    fill: true,
+                    yAxisID: 'y',
+                    label: this.$t('stats.apy'),
+                    suffix: ' %',
+                    parsing: false,
                 });
-            };
 
-            this.stakingData.apy = calculate(data, 'annual_percent_yld', 'stats.staking_apy');
-            this.stakingData.total = calculate(data, 'staked', 'stats.total_staked');
+                const stakedDataset = Object.freeze({
+                    data: data.map(({ staked }) => Math.round(staked)),
+                    fill: true,
+                    type: 'bar',
+                    yAxisID: 'volume',
+                    label: this.$t('stats.staking'),
+                    suffix: ' TON',
+                    parsing: false,
+                });
 
-            const apyDatatset = Object.freeze({
-                data: data.map(({ annual_percent_yld }) => +(annual_percent_yld * 100).toFixed(1)),
-                borderWidth: 1.5,
-                fill: true,
-                yAxisID: 'y',
-                label: this.$t('stats.apy'),
-                suffix: ' %',
-                parsing: false,
-            });
+                this.labels = data.map(({ date }) => new Date(date).valueOf());
+                this.datasets = [apyDatatset, stakedDataset];
 
-            const stakedDataset = Object.freeze({
-                data: data.map(({ staked }) => Math.round(staked.toFixed(0))),
-                fill: true,
-                type: 'bar',
-                yAxisID: 'volume',
-                label: this.$t('stats.staking'),
-                suffix: ' TON',
-                parsing: false,
-            });
+                this.stakingData.validators = Object.freeze({
+                    change: (this.validatorsAmount - validatorCountMonthAgo) / this.validatorsAmount,
+                    value: this.validatorsAmount,
+                    localization: 'stats.validators',
+                });
 
-            this.labels = labels;
-            this.datasets = [apyDatatset, stakedDataset];
-
-            const validators_month_ago = await getValidatorsStats({ offset: 43 });
-
-            this.validators_month_ago = validators_month_ago[0].validator_count;
-            this.stakingData.validators = Object.freeze({
-                change: (this.validatorsAmount - this.validators_month_ago) / this.validatorsAmount,
-                value: this.validatorsAmount,
-                localization: 'stats.validators'
-            });
-
-            this.isDataLoading = false;
-        }
+                this.isDataLoading = false;
+            } catch (error) {
+                console.log('Error fetching staking data:', error);
+            }
+        },
     },
 
     components: {
         LineChart,
         SideEar,
-        ChartChangeIndicator,
     },
 };
 </script>

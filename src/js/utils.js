@@ -1,23 +1,47 @@
+/* eslint camelcase: "off", func-names: "off", no-bitwise: "off" */
+
+// lookup tables
+const to_hex_array = [];
+
+const getHexArrayLookupTable = () => {
+    if (to_hex_array.length === 0) {
+        for (let ord = 0; ord <= 0xff; ord += 1) {
+            let s = ord.toString(16);
+            if (s.length < 2) {
+                s = '0' + s;
+            }
+            to_hex_array.push(s);
+        }
+    }
+
+    return to_hex_array;
+};
+
 /**
  * @see https://github.com/toncenter/tonweb/blob/f3304156fb3000e96a7ed10123ae31185792d05a/src/utils/Utils.js#L62
  * @param buffer  {Uint8Array}
  * @return {string}
  */
-export const bytesToHex = function(buffer) {
-    const hex_array = [];
-    for (let i = 0; i < buffer.byteLength; i++) {
-        hex_array.push(to_hex_array[buffer[i]]);
+export const bytesToHex = function (buffer) {
+    const hexArrayTable = getHexArrayLookupTable();
+    const hexArray = [];
+
+    for (let i = 0; i < buffer.byteLength; i += 1) {
+        hexArray.push(hexArrayTable[buffer[i]]);
     }
-    return hex_array.join("");
+
+    return hexArray.join('');
 };
 
 /**
  * @see https://github.com/toncenter/tonweb/blob/f3304156fb3000e96a7ed10123ae31185792d05a/src/utils/Utils.js#L76
  * @param hex {string}
- * @return {Uint8Array}
+ * @return {Array}
  */
-export const hexToBytes = function(hex) {
-    for (var bytes = [], c = 0; c < hex.length; c += 2) {
+export const hexToBytes = function (hex) {
+    const bytes = [];
+
+    for (let c = 0; c < hex.length; c += 2) {
         bytes.push(parseInt(hex.substr(c, 2), 16));
     }
 
@@ -26,28 +50,27 @@ export const hexToBytes = function(hex) {
 
 /**
  * @see https://github.com/toncenter/tonweb/blob/f3304156fb3000e96a7ed10123ae31185792d05a/src/utils/Utils.js#L98
- * @param str {string}
- * @param size  {number}
+ * @param str {String}
+ * @param size  {Number}
  * @return {Uint8Array}
  */
-export const stringToBytes = function(str, size = 1) {
-    let buf;
-    let bufView;
-    if (size === 1) {
-        buf = new ArrayBuffer(str.length);
-        bufView = new Uint8Array(buf);
+export const stringToBytes = function (str, size = 1) {
+    let TypedArray = undefined;
+
+    switch (size) {
+        case 1: TypedArray = Uint8Array; break;
+        case 2: TypedArray = Uint16Array; break;
+        case 4: TypedArray = Uint32Array; break;
+        default: throw new Error(`Invalid size: ${size}, must be 1, 2 or 4`);
     }
-    if (size === 2) {
-        buf = new ArrayBuffer(str.length * 2);
-        bufView = new Uint16Array(buf);
-    }
-    if (size === 4) {
-        buf = new ArrayBuffer(str.length * 4);
-        bufView = new Uint32Array(buf);
-    }
-    for (let i = 0, strLen = str.length; i < strLen; i++) {
+
+    const buffer = new ArrayBuffer(str.length * size);
+    const bufView = new TypedArray(buffer);
+
+    for (let i = 0; i < str.length; i += 1) {
         bufView[i] = str.charCodeAt(i);
     }
+
     return new Uint8Array(bufView.buffer);
 };
 
@@ -56,51 +79,88 @@ export const stringToBytes = function(str, size = 1) {
  * @param data  {ArrayLike<number>}
  * @return {Uint8Array}
  */
-export const crc16 = function(data) {
+export const crc16 = function (data) {
     const poly = 0x1021;
     let reg = 0;
+
     const message = new Uint8Array(data.length + 2);
     message.set(data);
-    for (let byte of message) {
+
+    message.forEach((byte) => {
         let mask = 0x80;
         while (mask > 0) {
             reg <<= 1;
             if (byte & mask) {
                 reg += 1;
             }
-            mask >>= 1
+            mask >>= 1;
             if (reg > 0xffff) {
                 reg &= 0xffff;
                 reg ^= poly;
             }
         }
+    });
+
+    return Uint8Array.of(Math.floor(reg / 256), reg % 256);
+};
+
+/**
+ * @param  {Number|String} value
+ * @return {String}
+ */
+export const dechex = function signedIntToHex(value) {
+    return parseInt(value, 10).toString(16).replace('-', '');
+};
+
+export const toBase64Web = base64 => base64.replace(/\+/g, '-').replace(/\//g, '_');
+export const toBase64Rfc = base64 => base64.replace(/\-/g, '+').replace(/_/g, '/'); // eslint-disable-line no-useless-escape
+export const base64decode = base64 => window.atob(toBase64Rfc(base64));
+
+/**
+ * @param  {String} value
+ * @param  {Boolean} options.webSafe
+ * @return {String}
+ */
+export const base64encode = function (value, { webSafe = true } = {}) {
+    const encoded = window.btoa(value);
+    return webSafe ? toBase64Web(encoded) : toBase64Rfc(encoded);
+};
+
+/**
+ * @param  {String} base64
+ * @return {Uint8Array}
+ */
+export const base64ToBytes = function (base64) {
+    const binaryString = base64decode(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+
+    for (let i = 0; i < len; i += 1) {
+        bytes[i] = binaryString.charCodeAt(i);
     }
-    return new Uint8Array([Math.floor(reg / 256), reg % 256]);
+
+    return bytes;
 };
 
 /**
  * @param  {String} hex
+ * @param  {Boolean} options.webSafe
  * @return {String}
  */
-export const hexToBase64 = function(hex) {
-    return window.btoa(String.fromCharCode(...hexToBytes(hex)));
+export const hexToBase64 = function (hex, { webSafe = false } = {}) {
+    const bytes = String.fromCharCode(...hexToBytes(hex));
+    return base64encode(bytes, { webSafe });
 };
 
-export const base64ToBytes = function(base64) {
-    const binary_string = atob(base64);
-    const len = binary_string.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binary_string.charCodeAt(i);
-    }
-    return bytes;
-};
+/**
+ * @param  {String} base64
+ * @return {String}
+ */
+export const base64ToHex = function (base64) {
+    const raw = base64decode(base64);
 
-export const base64ToHex = function(str) {
-    const raw = atob(str);
     let result = '';
-
-    for (let i = 0; i < raw.length; i++) {
+    for (let i = 0; i < raw.length; i += 1) {
         const hex = raw.charCodeAt(i).toString(16);
         result += (hex.length === 2 ? hex : '0' + hex);
     }
@@ -108,16 +168,12 @@ export const base64ToHex = function(str) {
     return result;
 };
 
-export const dechex = function signedIntToHex (value) {
-    return parseInt(value).toString(16).replace('-', '');
-};
-
-export const toBase64Web = (base64) => base64.replace(/\+/g, '-').replace(/\//g, '_');
-export const toBase64Rfc = (base64) => base64.replace(/\-/g, '+').replace(/_/g, '/');
-
+/**
+ * @param  {String} name
+ * @return {String}
+ */
 export const getCSSVar = (name) => {
-    const style = getComputedStyle(document.body);
-    return style.getPropertyValue(`--${name}`).trim();
+    return getComputedStyle(document.body).getPropertyValue(`--${name}`).trim();
 };
 
 /**
@@ -128,7 +184,7 @@ export const parseCsv = function convertCsvStringToObject(data) {
     const lines = data.split('\n');
     const keys = lines[0].split(',');
 
-    return lines.slice(1).map((line) => {
+    return lines.slice(1).map((line) => { /* eslint arrow-body-style: "off" */
         return line.split(',').reduce((previousItems, currentValue, idx) => {
             const key = keys[idx];
             return { ...previousItems, [key]: currentValue.trim() };

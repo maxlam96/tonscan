@@ -1,6 +1,7 @@
 import { TONCENTER_INDEX_API_ENDPOINT, TONCENTER_INDEX_API_KEY } from '~/config.js';
 import { base64ToBytes, toBase64Web, toBase64Rfc } from '~/utils.js';
 import { getAddressTransactions } from './extenderContracts.js'; // TODO
+import { getTransaction } from './toncenter.js';
 import axios from 'axios';
 
 // Disable headers if api key is not set. Otherwise
@@ -140,7 +141,7 @@ export const getTransactionsByAddress = async function(address, { limit = 50, of
         include_msg_body: true,
     };
 
-    const data = await getAddressTransactions(address, query).catch((e) => {
+    const data = await getTransaction(address, query).catch((e) => {
         return http.get('getTransactionsByAddress', { params: query }).then(({ data }) => data);
     });
 

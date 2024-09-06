@@ -1,0 +1,13 @@
+{
+  "0x00": "START",
+  "0x01": "END",
+  "0x02": "TRANSFER",
+  "0x03": "DEPLOY_CONTRACT",
+  "0x04": "CALL_CONTRACT",
+  "0x05": "RETURN",
+  "0x06": "REVERT",
+  "0x07": "CREATE",
+  "0x08": "SELF_DESTRUCT",
+  "0x09": "LOG",
+  "0x0a": "ERROR"
+}

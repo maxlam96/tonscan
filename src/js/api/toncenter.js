@@ -42,6 +42,7 @@ export const getAddressInfo = async function (address) {
     let result = undefined;
 
     try {
+        /* eslint padded-blocks:  "off" */
         const response = await http.get('getWalletInformation', { params: { address } });
         result = response.data.result;
 
@@ -54,9 +55,13 @@ export const getAddressInfo = async function (address) {
         throw error;
     }
 
-    if (result.wallet_type == 'nominator pool v1') {
+    // Override toncenter constants, since we have our own:
+    if (result.wallet_type === 'nominator pool v1') {
         result.wallet_type = undefined;
+        result.wallet = false;
     }
+
+    const is_wallet = result?.wallet_type?.startsWith('wallet') || result.wallet;
 
     return Object.freeze({
         address,
@@ -64,9 +69,12 @@ export const getAddressInfo = async function (address) {
         balance: result.balance,
         is_active: result.account_state === 'active',
         is_frozen: result.account_state === 'frozen',
+        is_uninit: result.account_state === 'uninitialized',
+        is_wallet,
         wallet_type: result.wallet_type || null,
         last_tx_lt: result.last_transaction_id?.lt,
         last_tx_hash: result.last_transaction_id?.hash,
+        account_state: result?.account_state || null,
     });
 };
 

@@ -1,11 +1,14 @@
 import { GETGEMS_GRAPHQL_ENDPOINT } from '~/config.js';
 import axios from 'axios';
 
+/* eslint camelcase: "off", func-names: "off" */
+const CORS_PROXY_URL = 'https://cors-anywhere.herokuapp.com/';
+
 const http = axios.create({
-    baseURL: GETGEMS_GRAPHQL_ENDPOINT,
+    baseURL: CORS_PROXY_URL + GETGEMS_GRAPHQL_ENDPOINT,
     headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Request-Method': 'POST',
+        'Content-Type': 'application/json'
+        //'Access-Control-Request-Method': 'POST',
     },
 });
 
@@ -110,8 +113,14 @@ fragment nftHistoryItem on NftItemHistory {
   }
 }`;
 
-export const nftItemsByOwner = async function(owner, first = 24, after = undefined) {
-    const { data: { data: { nftItemsByOwner }}} = await http.post(null, {
+/**
+ * @param  {String} owner
+ * @param  {Number} first
+ * @param  {String} after
+ * @return {Promise<Object>}
+ */
+export const nftItemsByOwner = async function (owner, first = 24, after = undefined) {
+    const { data: { data: { nftItemsByOwner: { cursor, items } } } } = await http.post(null, {
         query: GetUserItemsQuery,
         variables: {
             ownerAddress: owner,
@@ -119,13 +128,13 @@ export const nftItemsByOwner = async function(owner, first = 24, after = undefin
         },
     });
 
-    return nftItemsByOwner;
+    return { cursor, items };
 };
 
-export const getItemHistory = async function(address, count = 24, cursor = undefined) {
-    const { data: { data: { historyNftItem }}} = await http.post(null, {
-        query: GetItemHistoryQuery,
+export const getItemHistory = async function (address, count = 24, cursor = undefined) {
+    const { data: { data: { historyNftItem } } } = await http.post(null, {
         variables: { address, count, cursor },
+        query: GetItemHistoryQuery,
     });
 
     return historyNftItem;

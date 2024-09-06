@@ -212,7 +212,7 @@ export const blockAnal = function () {
  * @return {Promise<Object>}
  */
 export const getTransactionsStats = function (interval) {
-    return http.get(`blockchain/transaction_stats?days=${interval}`).then(({ data }) => data);
+    return http.get(`blockchain/market_stats?days=${interval}`).then(({ data }) => data);
 };
 
 /**

@@ -41,7 +41,8 @@ import {
 
 import {
     getPreviousBlocks,
-    getAllTransactions
+    getAllTransactions,
+    getCodeHash
 } from './toncenterV2.js';
 
 export {
@@ -80,4 +81,5 @@ export {
 
     getPreviousBlocks,
     getAllTransactions,
+    getCodeHash,
 };

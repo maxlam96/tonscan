@@ -23,6 +23,7 @@ export const TX_REGEX_OLD = new RegExp(/^\d+[\$:](?<hash>[\w\+\-\/]{43}\=)[\$:][
 export const APP_MAIN_LOCALE = process.env.APP_MAIN_LOCALE || 'en';
 export const APP_MAIN_THEME = 'auto';
 export const APP_MAIN_EXCHANGE_CURRENCY = 'usd';
+export const APP_MAIN_TX_SOURCE = 'toncenter';
 
 export const IS_TESTNET = process.env.TESTNET || false;
 export const ADDRBOOK_LOCATION = process.env.ADDRBOOK_LOCATION || 'https://catchain.github.io/tonscan/src/addrbook.json';
@@ -39,6 +40,7 @@ export const GETGEMS_GRAPHQL_ENDPOINT = process.env.GETGEMS_GRAPHQL_ENDPOINT || 
 export const TONAPI_ENDPOINT = process.env.TONAPI_ENDPOINT || 'https://tonapi.io/v1';
 export const TONAPI_KEY = process.env.TONAPI_KEY;
 export const TONTECH_API_ENDPOINT = process.env.TONTECH_API_ENDPOINT || 'https://api.ton.cat/tontech';
+export const TONCENTER_PREVIEW_API_ENDPOINT = process.env.TONCENTER_PREVIEW_API_ENDPOINT || 'https://preview.toncenter.com/api/v3/';
 
 export const TYPESENSE_API_KEY = process.env.TYPESENSE_API_KEY;
 export const TYPESENSE_API_ENDPOINT = process.env.TYPESENSE_API_ENDPOINT;
